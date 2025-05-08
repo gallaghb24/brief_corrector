@@ -78,17 +78,26 @@ if uploaded_file:
             st.error(f"❌ OpenAI API error: {e}")
             st.stop()
 
+                # strip code fences if ChatGPT returned them
+        corrected_csv_lines = corrected_csv.splitlines()
+        if corrected_csv_lines and corrected_csv_lines[0].strip().startswith("```"):
+            corrected_csv_lines = corrected_csv_lines[1:]
+        if corrected_csv_lines and corrected_csv_lines[-1].strip().startswith("```"):
+            corrected_csv_lines = corrected_csv_lines[:-1]
+        corrected_csv_stripped = "
+".join(corrected_csv_lines)
+
         # parse back into DataFrame
         try:
-            corrected_df = pd.read_csv(io.StringIO(corrected_csv))
+            corrected_df = pd.read_csv(io.StringIO(corrected_csv_stripped))
         except Exception as e:
             st.error(f"❌ Failed to parse corrected CSV: {e}")
-            st.code(corrected_csv, language="csv")
+            st.code(corrected_csv_stripped, language="csv")
             st.stop()
 
         corrected_sheets[sheet_name] = corrected_df
 
-    # write corrected sheets back to an Excel in-memory
+    # write corrected sheets back to an Excel in-memory back to an Excel in-memory
     out_buffer = io.BytesIO()
     with pd.ExcelWriter(out_buffer, engine="openpyxl") as writer:
         for name, cdf in corrected_sheets.items():
