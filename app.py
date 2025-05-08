@@ -4,6 +4,7 @@ import pandas as pd
 import openai
 import requests
 from bs4 import BeautifulSoup
+from openpyxl.utils import get_column_letter
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────────
 openai.api_key = st.secrets.get("OPENAI_API_KEY")
@@ -12,7 +13,7 @@ st.title("AI Assisted Brand Name Corrector")
 
 # ─── APP SUMMARY ───────────────────────────────────────────────────────────────
 st.markdown(
-    "Welcome to the AI-Assisted Brand Name Corrector! Simply upload your Excel file. As long as there is a column named *Brand*, the app will automatically detect and correct any misspelled or abbreviated brand names. It scrapes the latest brand data from Superdrug’s website and corrects your entries, then returns your workbook—seamlessly and in seconds."
+    "Welcome to the AI-Assisted Brand Name Corrector! Simply upload your Excel file, and the app scrapes the web for known correct brand names and corrects your entries."
 )
 
 # ─── FETCH SUPERDRUG BRANDS ─────────────────────────────────────────────────────
@@ -140,10 +141,19 @@ if not processed_any:
     st.error("No sheets had a 'brand' column. Nothing to correct.")
     st.stop()
 
+# ─── EXPORT RESULTS ─────────────────────────────────────────────────────────────
 out = io.BytesIO()
 with pd.ExcelWriter(out, engine="openpyxl") as writer:
     for name, sheet in corrected_sheets.items():
         sheet.to_excel(writer, sheet_name=name, index=False)
+        # auto-fit columns to content
+        ws = writer.sheets[name]
+        for idx, col in enumerate(sheet.columns, 1):
+            max_length = max(
+                sheet[col].astype(str).map(len).max(),
+                len(col)
+            )
+            ws.column_dimensions[get_column_letter(idx)].width = max_length + 2
 out.seek(0)
 
 st.success("✅ Brand correction complete!")
