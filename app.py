@@ -3,12 +3,12 @@ import streamlit as st
 import pandas as pd
 import openai
 
-# ─── CONFIGURE ────────────────────────────────────────────────────────────────
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+# ─── CONFIG ────────────────────────────────────────────────────────────────────
+openai.api_key = st.secrets.get("OPENAI_API_KEY")
 st.set_page_config(page_title="Brand Name Corrector", layout="wide")
 st.title("Excel Brand Name Spellchecker")
 
-# ─── KNOWN BRANDS ─────────────────────────────────────────────────────────────
+# ─── BRAND LIST ─────────────────────────────────────────────────────────────────
 KNOWN_BRANDS = [
     "L'Oréal", "Maybelline", "Garnier", "NYX", "Essie",
     "Kiehl’s", "CeraVe", "Vichy", "Lancôme", "Urban Decay",
@@ -45,12 +45,13 @@ Return only the corrected values in CSV format with header 'brand' and rows in t
 {csv_brands}
 ```"""
 
-# ─── FILE UPLOAD & PROCESSING ─────────────────────────────────────────────────
+# ─── UPLOAD ───────────────────────────────────────────────────────────────────
 uploaded_file = st.file_uploader("Upload an Excel file", type=["xlsx"])
 if not uploaded_file:
-    st.info("Please upload an .xlsx file with a 'brand' column.")
+    st.info("Please upload an .xlsx file containing a 'brand' column.")
     st.stop()
 
+# read all sheets
 try:
     sheets = pd.read_excel(uploaded_file, sheet_name=None)
 except Exception as e:
@@ -58,45 +59,54 @@ except Exception as e:
     st.stop()
 
 corrected_sheets = {}
+processed_any = False
+
 for sheet_name, df in sheets.items():
-    if 'brand' not in df.columns:
+    # display columns for debugging
+    st.write(f"Processing sheet: {sheet_name} with columns:", list(df.columns))
+
+    # find column named 'brand' case-insensitive
+    brand_cols = [col for col in df.columns if col.lower() == 'brand']
+    if not brand_cols:
+        st.warning(f"No 'brand' column found in sheet '{sheet_name}'. Skipping correction.")
         corrected_sheets[sheet_name] = df
         continue
 
-    # extract only the brand column
-    brands_series = df['brand'].astype(str)
+    processed_any = True
+    col = brand_cols[0]
+    brands_series = df[col].astype(str)
+
+    # convert to CSV
     buf = io.StringIO()
     brands_series.to_csv(buf, index=False, header=True)
     csv_brands = buf.getvalue()
 
-    # call ChatGPT for corrections
     prompt = PROMPT_TEMPLATE.format(
         brands=", ".join(KNOWN_BRANDS),
         csv_brands=csv_brands
     )
-    try:
-        res = openai.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user",   "content": prompt}
-            ],
-            temperature=0
-        )
-        corrected_output = res.choices[0].message.content.strip()
-    except Exception as e:
-        st.error(f"❌ OpenAI API error: {e}")
-        st.stop()
 
-    # remove any code fences
-    lines = corrected_output.splitlines()
-    if lines and lines[0].startswith("```"):
-        lines = lines[1:]
-    if lines and lines[-1].startswith("```"):
-        lines = lines[:-1]
+    # call API with spinner
+    with st.spinner(f"Correcting brands in '{sheet_name}'..."):
+        try:
+            res = openai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user",   "content": prompt}
+                ],
+                temperature=0
+            )
+        except Exception as e:
+            st.error(f"🚫 OpenAI API error: {e}")
+            st.stop()
+
+    corrected_output = res.choices[0].message.content.strip()
+    # strip fences
+    lines = [l for l in corrected_output.splitlines() if not l.strip().startswith("```")]
     corrected_csv = "\n".join(lines)
 
-    # parse corrected CSV and replace column
+    # parse
     try:
         corrected_df = pd.read_csv(io.StringIO(corrected_csv))
     except Exception as e:
@@ -104,16 +114,23 @@ for sheet_name, df in sheets.items():
         st.code(corrected_csv, language="csv")
         st.stop()
 
-    df['brand'] = corrected_df['brand']
+    # replace column and store
+    df[col] = corrected_df['brand']
     corrected_sheets[sheet_name] = df
 
-# ─── EXPORT RESULTS ─────────────────────────────────────────────────────────────
+# if nothing processed
+if not processed_any:
+    st.error("No sheets had a 'brand' column. Nothing to correct.")
+    st.stop()
+
+# write back to Excel
 out = io.BytesIO()
 with pd.ExcelWriter(out, engine="openpyxl") as writer:
     for name, sheet in corrected_sheets.items():
         sheet.to_excel(writer, sheet_name=name, index=False)
 out.seek(0)
 
+st.success("✅ Brand correction complete!")
 st.download_button(
     label="🚀 Download corrected Excel",
     data=out,
