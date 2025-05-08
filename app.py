@@ -12,9 +12,9 @@ st.title("Excel Brand Name Spellchecker")
 
 # ─── BRANDS & PROMPT ───────────────────────────────────────────────────────────
 KNOWN_BRANDS = [
-    "L'Oréal", "Maybelline", "Garnier", "NYX", "Essie",
-    "Kiehl’s", "CeraVe", "Vichy", "Lancôme", "Urban Decay",
-    "La Roche-Posay", "YSL"
+    "L'Oréal", "Maybelline", "Ghost", "Garnier", "NYX", "Essie",
+    "Kiehl’s", "CeraVe", "Ted Baker", "Vichy", "Lancôme", "Urban Decay",
+    "La Roche-Posay", "YSL", "Hugo Boss", "POLICE"
 ]
 
 PROMPT_TEMPLATE = """You are a brand name correction assistant. I will upload the contents of an Excel file that contains marketing brief information. The text may include misspelled brand names, and your job is to act like a brand name spellchecker.
