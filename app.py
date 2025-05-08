@@ -62,10 +62,7 @@ corrected_sheets = {}
 processed_any = False
 
 for sheet_name, df in sheets.items():
-    # display columns for debugging
-    st.write(f"Processing sheet: {sheet_name} with columns:", list(df.columns))
-
-    # find column named 'brand' case-insensitive
+    # locate 'brand' column (case-insensitive)
     brand_cols = [col for col in df.columns if col.lower() == 'brand']
     if not brand_cols:
         st.warning(f"No 'brand' column found in sheet '{sheet_name}'. Skipping correction.")
@@ -81,12 +78,11 @@ for sheet_name, df in sheets.items():
     brands_series.to_csv(buf, index=False, header=True)
     csv_brands = buf.getvalue()
 
+    # call API
     prompt = PROMPT_TEMPLATE.format(
         brands=", ".join(KNOWN_BRANDS),
         csv_brands=csv_brands
     )
-
-    # call API with spinner
     with st.spinner(f"Correcting brands in '{sheet_name}'..."):
         try:
             res = openai.chat.completions.create(
@@ -102,7 +98,7 @@ for sheet_name, df in sheets.items():
             st.stop()
 
     corrected_output = res.choices[0].message.content.strip()
-    # strip fences
+    # strip any fences
     lines = [l for l in corrected_output.splitlines() if not l.strip().startswith("```")]
     corrected_csv = "\n".join(lines)
 
@@ -114,16 +110,15 @@ for sheet_name, df in sheets.items():
         st.code(corrected_csv, language="csv")
         st.stop()
 
-    # replace column and store
     df[col] = corrected_df['brand']
     corrected_sheets[sheet_name] = df
 
-# if nothing processed
+# no corrections?
 if not processed_any:
     st.error("No sheets had a 'brand' column. Nothing to correct.")
     st.stop()
 
-# write back to Excel
+# export
 out = io.BytesIO()
 with pd.ExcelWriter(out, engine="openpyxl") as writer:
     for name, sheet in corrected_sheets.items():
