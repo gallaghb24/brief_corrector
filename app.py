@@ -2,14 +2,33 @@ import io
 import streamlit as st
 import pandas as pd
 import openai
+import requests
+from bs4 import BeautifulSoup
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────────
 openai.api_key = st.secrets.get("OPENAI_API_KEY")
-st.set_page_config(page_title="Brand Name Corrector", layout="wide")
-st.title("Excel Brand Name Spellchecker")
+st.set_page_config(page_title="AI Assisted Brand Name Corrector", layout="wide")
+st.title("AI Assisted Brand Name Corrector")
 
-# ─── BRAND LIST ─────────────────────────────────────────────────────────────────
-KNOWN_BRANDS = [
+# ─── APP SUMMARY ───────────────────────────────────────────────────────────────
+st.markdown(
+    "Welcome to the AI-Assisted Brand Name Corrector! Simply upload your Excel file. As long as there is a column named *Brand*, the app will automatically detect and correct any misspelled or abbreviated brand names. It scrapes the latest brand data from Superdrug’s website and corrects your entries, then returns your workbook—seamlessly and in seconds."
+)
+
+# ─── FETCH SUPERDRUG BRANDS ─────────────────────────────────────────────────────
+def fetch_superdrug_brands():
+    """
+    Scrapes the Superdrug A-Z Brands page and returns a list of brand names.
+    """
+    url = "https://www.superdrug.com/a-z-brands"
+    resp = requests.get(url, timeout=10)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+    links = soup.select("ul li a")
+    return [a.get_text(strip=True) for a in links]
+
+# ─── MANUAL + DYNAMIC BRAND LIST ────────────────────────────────────────────────
+MANUAL_BRANDS = [
     "L'Oréal", "Maybelline", "Garnier", "NYX", "Essie",
     "Kiehl’s", "CeraVe", "Vichy", "Lancôme", "Urban Decay",
     "La Roche-Posay", "YSL", "Izzy Miyake", "Police", "Zadig and Voltaire",
@@ -17,8 +36,20 @@ KNOWN_BRANDS = [
     "Armani", "Giorgio Armani", "Misguided", "Sarah Jessica Parker",
     "Jennifer Lopez", "Ariana Grande", "Marc Jacobs", "Paco Rabanne",
     "Guess", "DKNY", "Ralph Lauren", "Longhorn", "Thierry Mugler",
-    "David Beckham", "Calvin Klein"
+    "David Beckham", "Calvin Klein",
+    "Olay", "Nivea", "Dove", "Simple", "Neutrogena", "E45",
+    "Johnson & Johnson", "No7", "Rimmel", "Revlon", "Essence",
+    "Bourjois", "Max Factor", "Hawaiian Tropic", "Aveeno",
+    "Clean & Clear", "NARS", "Clinique", "Bobbi Brown",
+    "Estée Lauder", "Chanel", "Dior", "Gucci", "Versace",
+    "Dolce & Gabbana", "Burberry", "Lacoste", "Schwarzkopf",
+    "TRESemmé"
 ]
+try:
+    SUPERDRUG_BRANDS = fetch_superdrug_brands()
+except Exception:
+    SUPERDRUG_BRANDS = []
+KNOWN_BRANDS = list(dict.fromkeys(MANUAL_BRANDS + SUPERDRUG_BRANDS))
 
 # ─── PROMPT TEMPLATE ──────────────────────────────────────────────────────────
 PROMPT_TEMPLATE = """
@@ -45,13 +76,12 @@ Return only the corrected values in CSV format with header 'brand' and rows in t
 {csv_brands}
 ```"""
 
-# ─── UPLOAD ───────────────────────────────────────────────────────────────────
+# ─── FILE UPLOAD & PROCESSING ───────────────────────────────────────────────────
 uploaded_file = st.file_uploader("Upload an Excel file", type=["xlsx"])
 if not uploaded_file:
     st.info("Please upload an .xlsx file containing a 'brand' column.")
     st.stop()
 
-# read all sheets
 try:
     sheets = pd.read_excel(uploaded_file, sheet_name=None)
 except Exception as e:
@@ -62,23 +92,18 @@ corrected_sheets = {}
 processed_any = False
 
 for sheet_name, df in sheets.items():
-    # locate 'brand' column (case-insensitive)
     brand_cols = [col for col in df.columns if col.lower() == 'brand']
     if not brand_cols:
-        st.warning(f"No 'brand' column found in sheet '{sheet_name}'. Skipping correction.")
         corrected_sheets[sheet_name] = df
         continue
 
     processed_any = True
     col = brand_cols[0]
     brands_series = df[col].astype(str)
-
-    # convert to CSV
     buf = io.StringIO()
     brands_series.to_csv(buf, index=False, header=True)
     csv_brands = buf.getvalue()
 
-    # call API
     prompt = PROMPT_TEMPLATE.format(
         brands=", ".join(KNOWN_BRANDS),
         csv_brands=csv_brands
@@ -98,11 +123,9 @@ for sheet_name, df in sheets.items():
             st.stop()
 
     corrected_output = res.choices[0].message.content.strip()
-    # strip any fences
     lines = [l for l in corrected_output.splitlines() if not l.strip().startswith("```")]
     corrected_csv = "\n".join(lines)
 
-    # parse
     try:
         corrected_df = pd.read_csv(io.StringIO(corrected_csv))
     except Exception as e:
@@ -113,12 +136,10 @@ for sheet_name, df in sheets.items():
     df[col] = corrected_df['brand']
     corrected_sheets[sheet_name] = df
 
-# no corrections?
 if not processed_any:
     st.error("No sheets had a 'brand' column. Nothing to correct.")
     st.stop()
 
-# export
 out = io.BytesIO()
 with pd.ExcelWriter(out, engine="openpyxl") as writer:
     for name, sheet in corrected_sheets.items():
@@ -126,6 +147,7 @@ with pd.ExcelWriter(out, engine="openpyxl") as writer:
 out.seek(0)
 
 st.success("✅ Brand correction complete!")
+
 st.download_button(
     label="🚀 Download corrected Excel",
     data=out,
