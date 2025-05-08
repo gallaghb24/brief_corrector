@@ -12,9 +12,9 @@ st.title("Excel Brand Name Spellchecker")
 
 # ─── BRANDS & PROMPT ───────────────────────────────────────────────────────────
 KNOWN_BRANDS = [
-    "L'Oréal", "Maybelline", "Ghost", "Garnier", "NYX", "Essie",
-    "Kiehl’s", "CeraVe", "Ted Baker", "Vichy", "Lancôme", "Urban Decay",
-    "La Roche-Posay", "YSL", "Hugo Boss", "POLICE"
+    "L'Oréal", "Maybelline", "Garnier", "NYX", "Essie",
+    "Kiehl’s", "CeraVe", "Vichy", "Lancôme", "Urban Decay",
+    "La Roche-Posay", "YSL"
 ]
 
 PROMPT_TEMPLATE = """You are a brand name correction assistant. I will upload the contents of an Excel file that contains marketing brief information. The text may include misspelled brand names, and your job is to act like a brand name spellchecker.
@@ -44,7 +44,6 @@ uploaded_file = st.file_uploader("Upload an Excel file", type=["xlsx"])
 
 if uploaded_file:
     try:
-        # read all sheets into a dict of DataFrames
         sheets = pd.read_excel(uploaded_file, sheet_name=None)
     except Exception as e:
         st.error(f"❌ Error reading Excel file: {e}")
@@ -53,7 +52,6 @@ if uploaded_file:
     corrected_sheets = {}
 
     for sheet_name, df in sheets.items():
-        # convert to CSV text
         buf = io.StringIO()
         df.to_csv(buf, index=False)
         csv_in = buf.getvalue()
@@ -64,12 +62,11 @@ if uploaded_file:
         )
 
         try:
-            # Use the new openai-python v1.0.0+ interface
             res = openai.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user",   "content": prompt}
+                    {"role": "user", "content": prompt}
                 ],
                 temperature=0
             )
@@ -78,16 +75,14 @@ if uploaded_file:
             st.error(f"❌ OpenAI API error: {e}")
             st.stop()
 
-                # strip code fences if ChatGPT returned them
-        corrected_csv_lines = corrected_csv.splitlines()
-        if corrected_csv_lines and corrected_csv_lines[0].strip().startswith("```"):
-            corrected_csv_lines = corrected_csv_lines[1:]
-        if corrected_csv_lines and corrected_csv_lines[-1].strip().startswith("```"):
-            corrected_csv_lines = corrected_csv_lines[:-1]
-        corrected_csv_stripped = "
-".join(corrected_csv_lines)
+        # strip code fences if ChatGPT wrapped with ```
+        lines = corrected_csv.splitlines()
+        if lines and lines[0].strip().startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip().startswith("```"):
+            lines = lines[:-1]
+        corrected_csv_stripped = "\n".join(lines)
 
-        # parse back into DataFrame
         try:
             corrected_df = pd.read_csv(io.StringIO(corrected_csv_stripped))
         except Exception as e:
@@ -97,14 +92,12 @@ if uploaded_file:
 
         corrected_sheets[sheet_name] = corrected_df
 
-    # write corrected sheets back to an Excel in-memory back to an Excel in-memory
     out_buffer = io.BytesIO()
     with pd.ExcelWriter(out_buffer, engine="openpyxl") as writer:
         for name, cdf in corrected_sheets.items():
             cdf.to_excel(writer, sheet_name=name, index=False)
     out_buffer.seek(0)
 
-    # download button
     st.download_button(
         label="🚀 Download corrected Excel",
         data=out_buffer,
