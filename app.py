@@ -8,8 +8,9 @@ from openpyxl.utils import get_column_letter
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────────
 openai.api_key = st.secrets.get("OPENAI_API_KEY")
-st.set_page_config(page_title="AI Assisted Brand Name Corrector", layout="wide")
-st.title("AI Assisted Brand Name Corrector")
+# Hyphenated title for consistency
+st.set_page_config(page_title="AI-Assisted Brand Name Corrector", layout="wide")
+st.title("AI-Assisted Brand Name Corrector")
 
 # ─── APP SUMMARY ───────────────────────────────────────────────────────────────
 st.markdown(
@@ -37,14 +38,12 @@ MANUAL_BRANDS = [
     "Armani", "Giorgio Armani", "Misguided", "Sarah Jessica Parker",
     "Jennifer Lopez", "Ariana Grande", "Marc Jacobs", "Paco Rabanne",
     "Guess", "DKNY", "Ralph Lauren", "Longhorn", "Thierry Mugler",
-    "David Beckham", "Calvin Klein",
-    "Olay", "Nivea", "Dove", "Simple", "Neutrogena", "E45",
-    "Johnson & Johnson", "No7", "Rimmel", "Revlon", "Essence",
-    "Bourjois", "Max Factor", "Hawaiian Tropic", "Aveeno",
-    "Clean & Clear", "NARS", "Clinique", "Bobbi Brown",
+    "David Beckham", "Calvin Klein", "Olay", "Nivea", "Dove", "Simple",
+    "Neutrogena", "E45", "Johnson & Johnson", "No7", "Rimmel",
+    "Revlon", "Essence", "Bourjois", "Max Factor", "Hawaiian Tropic",
+    "Aveeno", "Clean & Clear", "NARS", "Clinique", "Bobbi Brown",
     "Estée Lauder", "Chanel", "Dior", "Gucci", "Versace",
-    "Dolce & Gabbana", "Burberry", "Lacoste", "Schwarzkopf",
-    "TRESemmé"
+    "Dolce & Gabbana", "Burberry", "Lacoste", "Schwarzkopf", "TRESemmé"
 ]
 try:
     SUPERDRUG_BRANDS = fetch_superdrug_brands()
@@ -100,9 +99,8 @@ for sheet_name, df in sheets.items():
 
     processed_any = True
     col = brand_cols[0]
-    brands_series = df[col].astype(str)
     buf = io.StringIO()
-    brands_series.to_csv(buf, index=False, header=True)
+    df[col].astype(str).to_csv(buf, index=False, header=True)
     csv_brands = buf.getvalue()
 
     prompt = PROMPT_TEMPLATE.format(
@@ -146,18 +144,13 @@ out = io.BytesIO()
 with pd.ExcelWriter(out, engine="openpyxl") as writer:
     for name, sheet in corrected_sheets.items():
         sheet.to_excel(writer, sheet_name=name, index=False)
-        # auto-fit columns to content
         ws = writer.sheets[name]
         for idx, col in enumerate(sheet.columns, 1):
-            max_length = max(
-                sheet[col].astype(str).map(len).max(),
-                len(col)
-            )
+            max_length = max(sheet[col].astype(str).map(len).max(), len(col))
             ws.column_dimensions[get_column_letter(idx)].width = max_length + 2
 out.seek(0)
 
 st.success("✅ Brand correction complete!")
-
 st.download_button(
     label="🚀 Download corrected Excel",
     data=out,
