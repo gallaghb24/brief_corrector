@@ -13,7 +13,7 @@ st.title("AI Assisted Brand Name Corrector")
 
 # ─── APP SUMMARY ───────────────────────────────────────────────────────────────
 st.markdown(
-    "Welcome to the AI-Assisted Brand Name Corrector! Simply upload your Excel file, and the app scrapes the web for known correct brand names and corrects your entries."
+    "Welcome to the AI-Assisted Brand Name Corrector! Simply upload your Excel file, and the app scrapes the web for known correct brand names and corrects any misspellings it finds."
 )
 
 # ─── FETCH SUPERDRUG BRANDS ─────────────────────────────────────────────────────
